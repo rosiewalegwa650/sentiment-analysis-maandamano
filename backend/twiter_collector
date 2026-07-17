@@ -1,0 +1,50 @@
+"""
+X (Twitter) collector — proposal 3.4.1.
+
+As of 2026, X's API v2 recent-search endpoint requires a paid tier
+(Basic/$200+ per month). This module is fully wired and ready to use the
+moment you have a TWITTER_BEARER_TOKEN in .env — nothing else in the app
+needs to change. Until then, use the mock generator or Reddit collector.
+"""
+import requests
+from datetime import datetime, timezone
+from flask import current_app
+
+SEARCH_URL = "https://api.x.com/2/tweets/search/recent"
+
+
+def collect_twitter_posts(limit: int = 50) -> list[dict]:
+    token = current_app.config["TWITTER_BEARER_TOKEN"]
+    if not token:
+        raise RuntimeError(
+            "TWITTER_BEARER_TOKEN not set in .env — this collector requires a "
+            "paid X API tier. Use the mock generator or Reddit collector instead."
+        )
+
+    keywords = current_app.config["PROTEST_KEYWORDS"]
+    query = f"({' OR '.join(keywords)}) lang:en OR lang:sw -is:retweet"
+
+    headers = {"Authorization": f"Bearer {token}"}
+    params = {
+        "query": query,
+        "max_results": min(limit, 100),
+        "tweet.fields": "created_at,public_metrics,geo",
+    }
+    resp = requests.get(SEARCH_URL, headers=headers, params=params, timeout=15)
+    resp.raise_for_status()
+    data = resp.json().get("data", [])
+
+    posts = []
+    for tweet in data:
+        metrics = tweet.get("public_metrics", {})
+        posts.append({
+            "external_id": tweet["id"],
+            "content": tweet["text"],
+            "timestamp": datetime.fromisoformat(tweet["created_at"].replace("Z", "+00:00")),
+            "platform": "twitter",
+            "location": None,
+            "likes": metrics.get("like_count", 0),
+            "shares": metrics.get("retweet_count", 0),
+            "comments": metrics.get("reply_count", 0),
+        })
+    return posts
