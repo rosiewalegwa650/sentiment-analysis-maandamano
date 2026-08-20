@@ -2,7 +2,7 @@ import os
 
 try:
     from dotenv import load_dotenv
-except ImportError:  # The API remains usable when optional dotenv is absent.
+except ImportError:
 
     def load_dotenv():
         return False
@@ -25,12 +25,14 @@ class Config:
     ESCALATION_MEDIUM_MAX = int(os.getenv("ESCALATION_MEDIUM_MAX", 60))
     ESCALATION_HIGH_MAX = int(os.getenv("ESCALATION_HIGH_MAX", 80))
 
-    # Keywords used for data collection and escalation risk weighting (Ch. 3.4.2 / 3.7)
+    # Keywords used for data collection and escalation risk weighting
     PROTEST_KEYWORDS = [
         "maandamano", "protest", "demonstration", "nairobi", "finance bill",
-        "cost of living", "serikali", "ruto", "wantam", "gen z",
+        "cost of living", "serikali", "ruto", "wantam", "gen z", "zakayo",
+        "bunge", "mwananchi", "vijana", "githurai", "kondele", "mombasa"
     ]
     RISK_KEYWORDS = [
-        "tear gas", "gunshot", "arrest", "curfew", "blocked", "shutdown",
-        "violence", "killed", "injured", "police brutality",
+        "tear gas", "teargas", "gunshot", "arrest", "curfew", "blocked", "shutdown",
+        "violence", "killed", "injured", "police brutality", "risasi", "ngori",
+        "imeharibika", "water cannon", "live bullets"
     ]

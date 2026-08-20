@@ -11,9 +11,10 @@ function App() {
   const [keywords, setKeywords] = useState([]);
   const [posts, setPosts] = useState([]);
   const [alert, setAlert] = useState({ score: 0, alert_level: 'Low' });
-  const [status, setStatus] = useState('Connecting to monitoring API…');
+  const [status, setStatus] = useState('Connecting to Maandamano Pulse API…');
   const [source, setSource] = useState('mock');
   const [activePage, setActivePage] = useState('dashboard');
+  const [selectedLanguage, setSelectedLanguage] = useState('all');
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -23,11 +24,15 @@ function App() {
         if (!response.ok) throw new Error(`${path}: ${response.status}`);
         return response.json();
       }));
-      setSummary(results[0]); setTrends(results[1]); setLocations(results[2]);
-      setKeywords(results[3]); setAlert(results[4]); setPosts(results[5]);
-      setStatus(results[0].total_posts ? `${results[0].total_posts} records loaded from the API` : 'No records collected yet');
+      setSummary(results[0]);
+      setTrends(results[1]);
+      setLocations(results[2]);
+      setKeywords(results[3]);
+      setAlert(results[4]);
+      setPosts(results[5]);
+      setStatus(results[0].total_posts ? `${results[0].total_posts} live entries synced from backend` : 'Ready to collect live Kenyan online feeds');
     } catch (error) {
-      setStatus(`API unavailable — ${error.message}`);
+      setStatus(`Backend Offline (${error.message}) — start Flask server on port 5000`);
     }
   }, []);
 
@@ -35,87 +40,362 @@ function App() {
 
   const collectData = async () => {
     const isDemo = source === 'mock';
-    setStatus(isDemo ? 'Generating demo records…' : `Collecting recent ${source} posts…`);
+    setStatus(isDemo ? 'Generating authentic Kenyan social media entries…' : `Fetching recent ${source} discussions…`);
     try {
-      const response = await fetch(`${API}/collect`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source, count: 50 }) });
+      const response = await fetch(`${API}/collect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source, count: 50 })
+      });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'Collection request failed');
+      if (!response.ok) throw new Error(payload.error || 'Data collection failed');
       await loadDashboard();
-      setStatus(`${payload.stored} new ${isDemo ? 'demo' : source} records added`);
-    } catch (error) { setStatus(error.message); }
+      setStatus(`Successfully fetched ${payload.stored} new records from ${isDemo ? 'Kenyan Demo Stream' : source}`);
+    } catch (error) { setStatus(`Collection failed: ${error.message}`); }
   };
 
   const clearData = async () => {
-    if (!window.confirm('Clear all locally collected dashboard data?')) return;
-    setStatus('Clearing local data…');
+    if (!window.confirm('Clear all collected posts and reset the dashboard?')) return;
+    setStatus('Clearing stored sentiment records…');
     try {
       const response = await fetch(`${API}/posts`, { method: 'DELETE' });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'Could not clear data');
+      if (!response.ok) throw new Error(payload.error || 'Failed to clear data');
       await loadDashboard();
-      setStatus(payload.message);
+      setStatus(payload.message || 'Dashboard cleared.');
     } catch (error) { setStatus(error.message); }
   };
 
+  const filteredPosts = posts.filter(post => selectedLanguage === 'all' || post.language === selectedLanguage);
   const latestTrend = trends[trends.length - 1];
+
   return (
-    <main className="dashboard">
-      <header className="topbar">
-        <div className="brand-lockup"><div className="flag-mark" aria-hidden="true"><i /><i /><i /></div><div><p className="eyebrow">Sentiment analysis project · Kenya</p><h1>Maandamano <em>Sentiment Tracker</em></h1><p className="subtitle">A simple dashboard for following public discussions around protests and cost of living.</p></div></div>
-        <div className="controls"><span className="api-status"><i />{status}</span><div className="button-group"><select value={source} onChange={event => setSource(event.target.value)} aria-label="Data source"><option value="mock">Demo data</option><option value="reddit">Reddit</option><option value="twitter">X / Twitter</option></select><button onClick={collectData}>Collect data</button><button className="secondary" onClick={loadDashboard}>Refresh</button><button className="clear" onClick={clearData}>Clear</button></div></div>
-      </header>
+    <div className="app-container">
+      {/* Decorative Maasai / Kenyan Cultural Header Banner */}
+      <div className="cultural-header-bar" aria-hidden="true">
+        <div className="beadwork-pattern"></div>
+      </div>
 
-      <nav className="main-nav" aria-label="Main navigation">
-        <button className={activePage === 'dashboard' ? 'active' : ''} onClick={() => setActivePage('dashboard')}>Dashboard</button>
-        <button className={activePage === 'collection' ? 'active' : ''} onClick={() => setActivePage('collection')}>Data collection</button>
-        <button className={activePage === 'reports' ? 'active' : ''} onClick={() => setActivePage('reports')}>Reports</button>
-      </nav>
+      <main className="dashboard">
+        <header className="topbar">
+          <div className="brand-lockup">
+            <div className="kenya-shield-badge" title="Kenya Citizen Pulse">
+              <span className="badge-flag-strip black"></span>
+              <span className="badge-flag-strip red"></span>
+              <span className="badge-flag-strip green"></span>
+            </div>
+            <div>
+              <div className="badge-row">
+                <span className="kenya-pill"><span className="flag-dot"></span> KENYA</span>
+                <span className="project-tag">Civic Tech Sentiment Engine</span>
+              </div>
+              <h1>Maandamano <em>Pulse</em></h1>
+              <p className="subtitle">Real-time public sentiment, Sheng/Swahili language monitoring & tension alert system for Kenyan protests.</p>
+            </div>
+          </div>
 
-      {activePage === 'dashboard' && <>
-      <section className="context-bar"><span><b>Project focus:</b> Kenya · public online posts</span><span><b>Current data:</b> {summary.total_posts ? 'API records' : 'Awaiting collection'}</span><span><b>Method:</b> basic sentiment classification</span></section>
+          <div className="controls">
+            <div className="api-status">
+              <span className="pulse-indicator"></span>
+              <span className="status-text">{status}</span>
+            </div>
+            <div className="button-group">
+              <select value={source} onChange={event => setSource(event.target.value)} aria-label="Select Feed Source">
+                <option value="mock">🇰🇪 Kenyan Synthetic Feed (Demo)</option>
+                <option value="reddit">Reddit (r/Kenya & Public)</option>
+                <option value="twitter">X / Twitter API v2</option>
+              </select>
+              <button className="primary-btn" onClick={collectData}>📥 Fetch Feed</button>
+              <button className="secondary-btn" onClick={loadDashboard}>🔄 Sync</button>
+              <button className="clear-btn" onClick={clearData}>🗑️ Reset</button>
+            </div>
+          </div>
+        </header>
 
-      <section className="metrics" aria-label="Sentiment summary">
-        <Metric label="Posts analysed" value={summary.total_posts} tone="black" />
-        <Metric label="Positive" value={`${summary.positive_pct}%`} tone="green" />
-        <Metric label="Neutral" value={`${summary.neutral_pct}%`} tone="gray" />
-        <Metric label="Negative" value={`${summary.negative_pct}%`} tone="red" />
-      </section>
+        <nav className="main-nav" aria-label="Primary Navigation">
+          <button className={activePage === 'dashboard' ? 'nav-tab active' : 'nav-tab'} onClick={() => setActivePage('dashboard')}>
+            📊 Sentiment & Tension Overview
+          </button>
+          <button className={activePage === 'collection' ? 'nav-tab active' : 'nav-tab'} onClick={() => setActivePage('collection')}>
+            📡 Data Feeds & Ingestion
+          </button>
+          <button className={activePage === 'reports' ? 'nav-tab active' : 'nav-tab'} onClick={() => setActivePage('reports')}>
+            📝 NLP Analytics & Report
+          </button>
+        </nav>
 
-      <section className="content-grid">
-        <article className="panel wide"><div className="panel-heading"><div><p className="section-kicker">What people are saying</p><h2>Sentiment trend</h2></div><span className="legend"><i className="positive" /> Positive <i className="neutral" /> Neutral <i className="negative" /> Negative</span></div><p className="muted">Percentage of posts in each sentiment category, grouped by date.</p>
-          {trends.length ? <div className="trend-list">{trends.map(day => <div className="trend-row" key={day.date}><span>{day.date}</span><div className="stack"><i className="positive" style={{ width: `${day.positive}%` }} /><i className="neutral" style={{ width: `${day.neutral}%` }} /><i className="negative" style={{ width: `${day.negative}%` }} /></div><b>{day.negative}% negative</b></div>)}</div> : <Empty text="Collect data to view daily trends." />}
-        </article>
-        <article className={`panel alert ${alert.alert_level.toLowerCase()}`}><p className="section-kicker">Simple risk score</p><h2>Escalation signal</h2><div className="score">{alert.score}<small>/100</small></div><strong>{alert.alert_level}</strong><p className="muted">Calculated from negative posts, risk words, and changes in volume.</p><p className="muted">Last 24h: {alert.recent_posts || 0} · Prior 24h: {alert.prior_posts || 0}</p></article>
-        <article className="panel"><p className="section-kicker">Geographic signal</p><h2>Locations</h2>{locations.length ? <div className="location-list">{locations.slice(0, 8).map(item => <div key={item.location}><span>{item.location}</span><b>{item.negative_pct}% negative</b><div className="bar"><i style={{ width: `${item.negative_pct}%` }} /></div></div>)}</div> : <Empty text="No reliable location data yet." />}</article>
-        <article className="panel"><p className="section-kicker">Conversation themes</p><h2>Top discussion terms</h2>{keywords.length ? <div className="tags">{keywords.map(item => <span key={item.keyword}>{item.keyword} <b>{item.count}</b></span>)}</div> : <Empty text="Keywords will appear after collection." />}</article>
-        <article className="panel wide"><div className="panel-heading"><div><p className="section-kicker">Source feed</p><h2>Recent posts</h2></div><span className="table-note">Latest API records</span></div><div className="table-wrap"><table><thead><tr><th>Time</th><th>Post</th><th>Language</th><th>Source</th><th>Sentiment</th><th>Confidence</th></tr></thead><tbody>{posts.slice(0, 12).map(post => <tr key={post.post_id}><td>{post.timestamp ? new Date(post.timestamp).toLocaleString() : '—'}</td><td>{post.content}</td><td>{post.language}</td><td>{post.platform}</td><td><span className={`pill ${post.sentiment_type}`}>{post.sentiment_type}</span></td><td>{Math.round(post.confidence_score * 100)}%</td></tr>)}</tbody></table>{!posts.length && <Empty text="Choose Demo data and click Collect data to populate this dashboard." />}</div></article>
-      </section>
-      </>}
+        {activePage === 'dashboard' && (
+          <>
+            <section className="context-bar">
+              <span><b>Target Domain:</b> Kenya Protests, Finance Bill & Cost of Living</span>
+              <span><b>Linguistic Scope:</b> English, Swahili & Sheng Code-switching</span>
+              <span><b>Model:</b> XLM-RoBERTa + Sheng Lexicon Alignment</span>
+            </section>
 
-      {activePage === 'collection' && <section className="page-view">
-        <div className="page-heading"><p className="section-kicker">Step 1 · Get records</p><h2>Data collection</h2><p>Choose a source and collect posts for the dashboard. Demo data is included for testing without credentials.</p></div>
-        <div className="collection-grid">
-          <article className="panel collection-card"><p className="section-kicker">Quick start</p><h2>Demo dataset</h2><p className="muted">Adds sample Kenya-focused posts across Nairobi locations, languages, and sentiment categories.</p><button onClick={() => { setSource('mock'); collectData(); }}>Load 50 demo posts</button></article>
-          <article className="panel collection-card"><p className="section-kicker">Live source</p><h2>Reddit collection</h2><p className="muted">Searches recent public Reddit content. Add your Reddit credentials in the backend <code>.env</code> file first.</p><button className="secondary" onClick={() => { setSource('reddit'); collectData(); }}>Collect from Reddit</button></article>
-          <article className="panel collection-card"><p className="section-kicker">Data management</p><h2>Start over</h2><p className="muted">Remove records stored in this local project database before a new test run.</p><button className="clear" onClick={clearData}>Clear all data</button></article>
-        </div>
-        <article className="panel run-summary"><p className="section-kicker">Collection status</p><h2>{summary.total_posts} posts currently stored</h2><p className="muted">{status}</p><button className="secondary" onClick={loadDashboard}>Check for updates</button></article>
-      </section>}
+            <section className="metrics" aria-label="Sentiment Summary Cards">
+              <Metric label="Total Posts Monitored" value={summary.total_posts} tone="black" icon="💬" />
+              <Metric label="Positive Sentiment" value={`${summary.positive_pct}%`} tone="green" icon="🕊️" />
+              <Metric label="Neutral Discussion" value={`${summary.neutral_pct}%`} tone="gray" icon="⚖️" />
+              <Metric label="Negative / Tension" value={`${summary.negative_pct}%`} tone="red" icon="🔥" />
+            </section>
 
-      {activePage === 'reports' && <section className="page-view">
-        <div className="page-heading"><p className="section-kicker">Step 2 · Review results</p><h2>Analysis report</h2><p>A quick summary based on all records currently stored in the application.</p></div>
-        <div className="report-grid">
-          <article className="panel report-highlight"><p className="section-kicker">Overall result</p><h2>{summary.total_posts ? `${summary.negative_pct}% of posts are negative` : 'No results yet'}</h2><p className="muted">{summary.total_posts ? `Out of ${summary.total_posts} analysed posts, the current escalation score is ${alert.score}/100 (${alert.alert_level}).` : 'Collect demo data first to generate a report.'}</p></article>
-          <article className="panel"><p className="section-kicker">Sentiment split</p><h2>Current percentages</h2><div className="report-list"><span>Positive <b>{summary.positive_pct}%</b></span><span>Neutral <b>{summary.neutral_pct}%</b></span><span>Negative <b>{summary.negative_pct}%</b></span></div></article>
-          <article className="panel"><p className="section-kicker">Locations to review</p><h2>Highest negative share</h2>{locations.length ? <div className="report-list">{locations.slice(0, 4).map(location => <span key={location.location}>{location.location} <b>{location.negative_pct}%</b></span>)}</div> : <Empty text="Location results will appear after collection." />}</article>
-          <article className="panel wide"><p className="section-kicker">Key themes</p><h2>Frequently used words</h2>{keywords.length ? <div className="tags">{keywords.map(item => <span key={item.keyword}>{item.keyword} <b>{item.count}</b></span>)}</div> : <Empty text="Keyword results will appear after collection." />}</article>
-        </div>
-      </section>}
-      <footer>Maandamano Sentiment Tracker · Student project dashboard {latestTrend && `· Latest data: ${latestTrend.date}`}</footer>
-    </main>
+            <section className="content-grid">
+              <article className="panel wide">
+                <div className="panel-heading">
+                  <div>
+                    <p className="section-kicker">Temporal Sentiment Trend</p>
+                    <h2>Daily Citizen Sentiment Distribution</h2>
+                  </div>
+                  <span className="legend">
+                    <i className="positive" /> Positive <i className="neutral" /> Neutral <i className="negative" /> Tension
+                  </span>
+                </div>
+                <p className="muted">Proportion of positive, neutral, and tense posts aggregated by date.</p>
+                {trends.length ? (
+                  <div className="trend-list">
+                    {trends.map(day => (
+                      <div className="trend-row" key={day.date}>
+                        <span className="trend-date">{day.date}</span>
+                        <div className="stack">
+                          <i className="positive" style={{ width: `${day.positive}%` }} title={`Positive: ${day.positive}%`} />
+                          <i className="neutral" style={{ width: `${day.neutral}%` }} title={`Neutral: ${day.neutral}%`} />
+                          <i className="negative" style={{ width: `${day.negative}%` }} title={`Negative: ${day.negative}%`} />
+                        </div>
+                        <b className="trend-stat">{day.negative}% tense</b>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <Empty text="Click 'Fetch Feed' above to populate sentiment trends." />
+                )}
+              </article>
+
+              <article className={`panel alert ${alert.alert_level ? alert.alert_level.toLowerCase() : 'low'}`}>
+                <p className="section-kicker">Real-time Safety Alert</p>
+                <h2>Escalation Risk Signal</h2>
+                <div className="score">
+                  {alert.score}
+                  <small>/100</small>
+                </div>
+                <div className="alert-badge-wrap">
+                  <span className={`alert-badge ${alert.alert_level ? alert.alert_level.toLowerCase() : 'low'}`}>
+                    {alert.alert_level || 'Low'} Risk Level
+                  </span>
+                </div>
+                <p className="muted">Evaluates negative sentiment density, risk keywords (e.g. tear gas, arrests), and post volume surge.</p>
+                <div className="window-stats">
+                  <span>Last 24h: <b>{alert.recent_posts || 0} posts</b></span>
+                  <span>Prior 24h: <b>{alert.prior_posts || 0} posts</b></span>
+                </div>
+              </article>
+
+              <article className="panel">
+                <p className="section-kicker">Regional Sentiment</p>
+                <h2>Kenyan Hotspots</h2>
+                {locations.length ? (
+                  <div className="location-list">
+                    {locations.slice(0, 8).map(item => (
+                      <div key={item.location} className="location-item">
+                        <div className="location-header">
+                          <span className="loc-name">📍 {item.location}</span>
+                          <b className="loc-neg">{item.negative_pct}% negative</b>
+                        </div>
+                        <div className="bar">
+                          <i style={{ width: `${item.negative_pct}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <Empty text="Location breakdown will appear after fetching posts." />
+                )}
+              </article>
+
+              <article className="panel">
+                <p className="section-kicker">Linguistic & Key Terms</p>
+                <h2>Top Discussion Topics</h2>
+                {keywords.length ? (
+                  <div className="tags">
+                    {keywords.map(item => (
+                      <span key={item.keyword} className="tag-chip">
+                        #{item.keyword} <b className="tag-count">{item.count}</b>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <Empty text="Top keywords will appear once posts are collected." />
+                )}
+              </article>
+
+              <article className="panel wide">
+                <div className="panel-heading">
+                  <div>
+                    <p className="section-kicker">Social Stream Analysis</p>
+                    <h2>Live Posts Feed & NLP Output</h2>
+                  </div>
+                  <div className="filter-wrap">
+                    <label htmlFor="lang-filter">Filter Language: </label>
+                    <select id="lang-filter" value={selectedLanguage} onChange={e => setSelectedLanguage(e.target.value)}>
+                      <option value="all">All Languages</option>
+                      <option value="sheng">Sheng</option>
+                      <option value="swahili">Swahili</option>
+                      <option value="english">English</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Timestamp</th>
+                        <th>Content</th>
+                        <th>Language</th>
+                        <th>Platform</th>
+                        <th>Location</th>
+                        <th>Sentiment</th>
+                        <th>Confidence</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredPosts.slice(0, 15).map(post => (
+                        <tr key={post.post_id}>
+                          <td className="time-col">{post.timestamp ? new Date(post.timestamp).toLocaleString() : '—'}</td>
+                          <td className="content-col">{post.content}</td>
+                          <td><span className={`lang-badge ${post.language}`}>{post.language}</span></td>
+                          <td><span className="platform-tag">{post.platform}</span></td>
+                          <td>{post.location || 'Nairobi CBD'}</td>
+                          <td><span className={`pill ${post.sentiment_type}`}>{post.sentiment_type}</span></td>
+                          <td className="conf-col">{Math.round((post.confidence_score || 0) * 100)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {!filteredPosts.length && <Empty text="No matching posts found. Fetch feeds or select 'All Languages'." />}
+                </div>
+              </article>
+            </section>
+          </>
+        )}
+
+        {activePage === 'collection' && (
+          <section className="page-view">
+            <div className="page-heading">
+              <p className="section-kicker">Data Pipeline Control</p>
+              <h2>Social Media Ingestion & Data Sources</h2>
+              <p>Collect public discussions across platforms to run NLP classification and escalation detection.</p>
+            </div>
+            <div className="collection-grid">
+              <article className="panel collection-card">
+                <p className="section-kicker">Instant Synthetic Feed</p>
+                <h2>Kenyan Social Stream (Demo)</h2>
+                <p className="muted">Simulates real-time English, Swahili, and Sheng posts across Kenyan urban centers like Nairobi CBD, Kibra, Githurai, Kondele, Eldoret & Mombasa.</p>
+                <button className="primary-btn" onClick={() => { setSource('mock'); collectData(); }}>⚡ Load 50 Kenyan Posts</button>
+              </article>
+              <article className="panel collection-card">
+                <p className="section-kicker">Live Reddit Search</p>
+                <h2>Reddit Ingestion</h2>
+                <p className="muted">Searches public discussions in subreddits like r/Kenya. Requires REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET configured in backend environment.</p>
+                <button className="secondary-btn" onClick={() => { setSource('reddit'); collectData(); }}>Fetch from Reddit API</button>
+              </article>
+              <article className="panel collection-card">
+                <p className="section-kicker">Live X / Twitter Search</p>
+                <h2>X (Twitter) Ingestion</h2>
+                <p className="muted">Polls recent tweets matching protest & civic keywords in Kenya. Requires TWITTER_BEARER_TOKEN in backend environment.</p>
+                <button className="secondary-btn" onClick={() => { setSource('twitter'); collectData(); }}>Fetch from X API</button>
+              </article>
+            </div>
+            <article className="panel run-summary">
+              <p className="section-kicker">Ingestion Status</p>
+              <h2>{summary.total_posts} records currently stored in SQLite database</h2>
+              <p className="muted">{status}</p>
+            </article>
+          </section>
+        )}
+
+        {activePage === 'reports' && (
+          <section className="page-view">
+            <div className="page-heading">
+              <p className="section-kicker">NLP Insights & Summary</p>
+              <h2>Sentiment & Escalation Executive Report</h2>
+              <p>Key findings and metrics generated from current stored records.</p>
+            </div>
+            <div className="report-grid">
+              <article className="panel report-highlight">
+                <p className="section-kicker">Overall Sentiment Breakdown</p>
+                <h2>{summary.total_posts ? `${summary.negative_pct}% Tension / Negative Sentiment` : 'No data collected'}</h2>
+                <p className="muted">
+                  {summary.total_posts
+                    ? `Analyzed ${summary.total_posts} citizen posts. Escalation score is calculated at ${alert.score}/100 (${alert.alert_level} Risk).`
+                    : 'Fetch social feeds to build the sentiment report.'}
+                </p>
+              </article>
+              <article className="panel">
+                <p className="section-kicker">Sentiment Breakdown</p>
+                <h2>Category Distribution</h2>
+                <div className="report-list">
+                  <span>Positive Sentiment <b>{summary.positive_pct}%</b></span>
+                  <span>Neutral Discussion <b>{summary.neutral_pct}%</b></span>
+                  <span>Tension / Negative <b>{summary.negative_pct}%</b></span>
+                </div>
+              </article>
+              <article className="panel">
+                <p className="section-kicker">High Risk Locations</p>
+                <h2>Top Locations with Tension</h2>
+                {locations.length ? (
+                  <div className="report-list">
+                    {locations.slice(0, 5).map(loc => (
+                      <span key={loc.location}>{loc.location} <b>{loc.negative_pct}% tension</b></span>
+                    ))}
+                  </div>
+                ) : (
+                  <Empty text="Location results will appear after feed ingestion." />
+                )}
+              </article>
+              <article className="panel wide">
+                <p className="section-kicker">Dominant Keywords</p>
+                <h2>Top Extracted Terms</h2>
+                {keywords.length ? (
+                  <div className="tags">
+                    {keywords.map(item => (
+                      <span key={item.keyword} className="tag-chip">
+                        #{item.keyword} <b>{item.count}</b>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <Empty text="Keyword data will populate after ingestion." />
+                )}
+              </article>
+            </div>
+          </section>
+        )}
+
+        <footer className="footer">
+          <div className="footer-content">
+            <span><b>Maandamano Pulse</b> · Kenyan Social Sentiment & Tension Analytics System</span>
+            {latestTrend && <span className="footer-date">Latest Sync: {latestTrend.date}</span>}
+          </div>
+        </footer>
+      </main>
+    </div>
   );
 }
 
-function Metric({ label, value, tone }) { return <article className={`metric ${tone}`}><span>{label}</span><strong>{value}</strong></article>; }
-function Empty({ text }) { return <p className="empty">{text}</p>; }
+function Metric({ label, value, tone, icon }) {
+  return (
+    <article className={`metric ${tone}`}>
+      <div className="metric-header">
+        <span>{label}</span>
+        <span className="metric-icon">{icon}</span>
+      </div>
+      <strong>{value}</strong>
+    </article>
+  );
+}
+
+function Empty({ text }) {
+  return <p className="empty">{text}</p>;
+}
+
 export default App;

@@ -9,6 +9,7 @@ instance/
 *.sqlite
 *.sqlite3
 sentiment.db
+*.log
 
 # JavaScript
 frontend/node_modules/
