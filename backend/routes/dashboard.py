@@ -133,6 +133,67 @@ def keywords():
     return jsonify([{"keyword": k, "count": v} for k, v in top])
 
 
+@dashboard_bp.route("/dashboard/live", methods=["GET"])
+def live_stream():
+    """Real-time data stream endpoint providing live metrics, post velocity & fresh social stream items."""
+    now = datetime.now(timezone.utc)
+
+    def as_utc(value):
+        if not value:
+            return now
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+    rows = _joined_query().order_by(SocialMediaPost.timestamp.desc()).all()
+    total = len(rows)
+
+    # Posts in last 10 minutes for velocity calculation
+    ten_mins_ago = now - timedelta(minutes=10)
+    recent_10m = [r for r in rows if as_utc(r[0].timestamp) >= ten_mins_ago]
+    velocity_per_min = round(len(recent_10m) / 10.0, 1) if recent_10m else (round(total / 60.0, 1) if total else 0.0)
+
+    # Sentiment distribution in recent posts
+    counts = defaultdict(int)
+    for _, sr in rows:
+        counts[sr.sentiment_type] += 1
+
+    latest_10 = rows[:10]
+    stream_items = [
+        {
+            "post_id": p.post_id,
+            "content": p.content,
+            "language": p.language,
+            "platform": p.platform,
+            "location": p.location or "Nairobi CBD",
+            "timestamp": p.timestamp.isoformat() if p.timestamp else now.isoformat(),
+            "sentiment_type": sr.sentiment_type,
+            "confidence_score": sr.confidence_score,
+            "likes": p.likes,
+            "shares": p.shares,
+        }
+        for p, sr in latest_10
+    ]
+
+    recent_data = [{"content": p.content, "sentiment_type": sr.sentiment_type} for p, sr in rows[:50]]
+    escalation_info = compute_escalation(recent_data, [20, max(20, len(recent_data))])
+
+    return jsonify({
+        "timestamp": now.isoformat(),
+        "status": "streaming",
+        "total_posts": total,
+        "posting_velocity_per_min": velocity_per_min,
+        "sentiment_distribution": {
+            "positive": counts["positive"],
+            "neutral": counts["neutral"],
+            "negative": counts["negative"],
+            "positive_pct": round(counts["positive"] / total * 100, 1) if total else 0,
+            "neutral_pct": round(counts["neutral"] / total * 100, 1) if total else 0,
+            "negative_pct": round(counts["negative"] / total * 100, 1) if total else 0,
+        },
+        "escalation": escalation_info,
+        "stream": stream_items,
+    })
+
+
 @dashboard_bp.route("/posts", methods=["GET"])
 def list_posts():
     """Raw post + sentiment feed, for a posts table view."""
