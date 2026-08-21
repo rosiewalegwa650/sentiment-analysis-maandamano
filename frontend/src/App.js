@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import Login from './Login';
 import './App.css';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
@@ -15,6 +16,35 @@ function App() {
   const [source, setSource] = useState('mock');
   const [activePage, setActivePage] = useState('dashboard');
   const [selectedLanguage, setSelectedLanguage] = useState('all');
+
+  // Authentication State
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authToken, setAuthToken] = useState(localStorage.getItem('token') || '');
+
+  // Real-time Data Stream State
+  const [isLiveStreaming, setIsLiveStreaming] = useState(true);
+  const [liveData, setLiveData] = useState(null);
+  const [lastLiveSync, setLastLiveSync] = useState(null);
+
+  // Validate session on load
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      fetch(`${API}/auth/me`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+        .then(res => res.ok ? res.json() : Promise.reject())
+        .then(data => {
+          setCurrentUser(data.user);
+          setAuthToken(token);
+        })
+        .catch(() => {
+          localStorage.removeItem('token');
+          setCurrentUser(null);
+          setAuthToken('');
+        });
+    }
+  }, []);
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -36,7 +66,55 @@ function App() {
     }
   }, []);
 
-  useEffect(() => { loadDashboard(); }, [loadDashboard]);
+  const fetchLiveData = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/dashboard/live`);
+      if (res.ok) {
+        const data = await res.json();
+        setLiveData(data);
+        setLastLiveSync(new Date().toLocaleTimeString());
+      }
+    } catch (err) {
+      console.error('Real-time sync error:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDashboard();
+    fetchLiveData();
+  }, [loadDashboard, fetchLiveData]);
+
+  // Real-time auto-polling interval
+  useEffect(() => {
+    let intervalId;
+    if (isLiveStreaming) {
+      intervalId = setInterval(() => {
+        fetchLiveData();
+        loadDashboard();
+      }, 3000);
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [isLiveStreaming, fetchLiveData, loadDashboard]);
+
+  const handleLoginSuccess = (user, token) => {
+    setCurrentUser(user);
+    setAuthToken(token);
+    setActivePage('dashboard');
+  };
+
+  const handleLogout = async () => {
+    if (authToken) {
+      fetch(`${API}/auth/logout`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      }).catch(() => {});
+    }
+    localStorage.removeItem('token');
+    setCurrentUser(null);
+    setAuthToken('');
+  };
 
   const collectData = async () => {
     const isDemo = source === 'mock';
@@ -50,6 +128,7 @@ function App() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Data collection failed');
       await loadDashboard();
+      await fetchLiveData();
       setStatus(`Successfully fetched ${payload.stored} new records from ${isDemo ? 'Kenyan Demo Stream' : source}`);
     } catch (error) { setStatus(`Collection failed: ${error.message}`); }
   };
@@ -62,6 +141,7 @@ function App() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Failed to clear data');
       await loadDashboard();
+      await fetchLiveData();
       setStatus(payload.message || 'Dashboard cleared.');
     } catch (error) { setStatus(error.message); }
   };
@@ -95,10 +175,28 @@ function App() {
           </div>
 
           <div className="controls">
+            <div className="user-profile-badge">
+              {currentUser ? (
+                <div className="user-info">
+                  <span className="user-icon">👤</span>
+                  <div className="user-meta">
+                    <strong>{currentUser.username}</strong>
+                    <small>{currentUser.role}</small>
+                  </div>
+                  <button className="logout-btn" onClick={handleLogout} title="Log Out">Logout</button>
+                </div>
+              ) : (
+                <button className="login-header-btn" onClick={() => setActivePage('login')}>
+                  🔑 Analyst Log In
+                </button>
+              )}
+            </div>
+
             <div className="api-status">
-              <span className="pulse-indicator"></span>
+              <span className={isLiveStreaming ? "pulse-indicator active" : "pulse-indicator"}></span>
               <span className="status-text">{status}</span>
             </div>
+
             <div className="button-group">
               <select value={source} onChange={event => setSource(event.target.value)} aria-label="Select Feed Source">
                 <option value="mock">🇰🇪 Kenyan Synthetic Feed (Demo)</option>
@@ -114,13 +212,19 @@ function App() {
 
         <nav className="main-nav" aria-label="Primary Navigation">
           <button className={activePage === 'dashboard' ? 'nav-tab active' : 'nav-tab'} onClick={() => setActivePage('dashboard')}>
-            📊 Sentiment & Tension Overview
+            📊 Sentiment Overview
+          </button>
+          <button className={activePage === 'live' ? 'nav-tab active live-tab' : 'nav-tab live-tab'} onClick={() => setActivePage('live')}>
+            ⚡ Real-Time Data Stream {isLiveStreaming && <span className="live-dot-ticker">🔴 LIVE</span>}
           </button>
           <button className={activePage === 'collection' ? 'nav-tab active' : 'nav-tab'} onClick={() => setActivePage('collection')}>
             📡 Data Feeds & Ingestion
           </button>
           <button className={activePage === 'reports' ? 'nav-tab active' : 'nav-tab'} onClick={() => setActivePage('reports')}>
             📝 NLP Analytics & Report
+          </button>
+          <button className={activePage === 'login' ? 'nav-tab active' : 'nav-tab'} onClick={() => setActivePage('login')}>
+            🔑 {currentUser ? 'Account Profile' : 'Log In Page'}
           </button>
         </nav>
 
@@ -278,6 +382,107 @@ function App() {
           </>
         )}
 
+        {activePage === 'live' && (
+          <section className="page-view">
+            <div className="live-stream-header">
+              <div>
+                <p className="section-kicker">Live Analytics & Stream Presentation</p>
+                <h2>Real-Time Citizen Discussion Stream</h2>
+                <p className="muted">Continuous auto-polling updates tracking sentiment shifts and post velocity across Kenyan social channels.</p>
+              </div>
+              <div className="live-controls">
+                <div className="live-status-pill">
+                  <span className={isLiveStreaming ? "beacon active" : "beacon paused"}></span>
+                  <strong>{isLiveStreaming ? "STREAMING LIVE (3s sync)" : "STREAM PAUSED"}</strong>
+                </div>
+                <button
+                  className={isLiveStreaming ? "secondary-btn" : "primary-btn"}
+                  onClick={() => setIsLiveStreaming(!isLiveStreaming)}
+                >
+                  {isLiveStreaming ? "⏸ Pause Live Stream" : "▶️ Resume Live Stream"}
+                </button>
+                {lastLiveSync && <small className="last-sync-tag">Last sync: {lastLiveSync}</small>}
+              </div>
+            </div>
+
+            <section className="metrics live-metrics" aria-label="Real-Time Ticker Metrics">
+              <article className="metric black">
+                <div className="metric-header">
+                  <span>Posting Velocity Rate</span>
+                  <span className="metric-icon">⚡</span>
+                </div>
+                <strong>{liveData ? `${liveData.posting_velocity_per_min} posts/min` : '0.0 posts/min'}</strong>
+              </article>
+
+              <article className="metric red">
+                <div className="metric-header">
+                  <span>Live Escalation Risk</span>
+                  <span className="metric-icon">🚨</span>
+                </div>
+                <strong>{liveData?.escalation ? `${liveData.escalation.score}/100 (${liveData.escalation.alert_level})` : '0/100'}</strong>
+              </article>
+
+              <article className="metric green">
+                <div className="metric-header">
+                  <span>Live Positive Share</span>
+                  <span className="metric-icon">🕊️</span>
+                </div>
+                <strong>{liveData?.sentiment_distribution ? `${liveData.sentiment_distribution.positive_pct}%` : '0%'}</strong>
+              </article>
+
+              <article className="metric gray">
+                <div className="metric-header">
+                  <span>Total Ingested Volume</span>
+                  <span className="metric-icon">📡</span>
+                </div>
+                <strong>{liveData ? `${liveData.total_posts} entries` : '0 entries'}</strong>
+              </article>
+            </section>
+
+            <article className="panel wide live-feed-panel">
+              <div className="panel-heading">
+                <div>
+                  <p className="section-kicker">Incoming Real-Time Feed</p>
+                  <h2>Live Post Ingestion Activity</h2>
+                </div>
+                <span className="live-sync-indicator">Auto-refresh active</span>
+              </div>
+
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Social Content</th>
+                      <th>Dialect / Lang</th>
+                      <th>Platform</th>
+                      <th>Location</th>
+                      <th>Sentiment Output</th>
+                      <th>Confidence</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {liveData?.stream?.map((post) => (
+                      <tr key={post.post_id} className="live-row">
+                        <td className="time-col">{new Date(post.timestamp).toLocaleTimeString()}</td>
+                        <td className="content-col"><strong>{post.content}</strong></td>
+                        <td><span className={`lang-badge ${post.language}`}>{post.language}</span></td>
+                        <td><span className="platform-tag">{post.platform}</span></td>
+                        <td>📍 {post.location}</td>
+                        <td><span className={`pill ${post.sentiment_type}`}>{post.sentiment_type}</span></td>
+                        <td className="conf-col">{Math.round((post.confidence_score || 0) * 100)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {(!liveData?.stream || liveData.stream.length === 0) && (
+                  <Empty text="No live stream data. Click 'Fetch Feed' in the header to generate social posts." />
+                )}
+              </div>
+            </article>
+          </section>
+        )}
+
         {activePage === 'collection' && (
           <section className="page-view">
             <div className="page-heading">
@@ -368,6 +573,12 @@ function App() {
                 )}
               </article>
             </div>
+          </section>
+        )}
+
+        {activePage === 'login' && (
+          <section className="page-view">
+            <Login onLoginSuccess={handleLoginSuccess} currentUser={currentUser} />
           </section>
         )}
 

@@ -69,10 +69,49 @@ def test_dashboard_endpoints_after_collection(client):
     assert res_kw.status_code == 200
     assert isinstance(res_kw.json, list)
 
+    # Live Stream
+    res_live = client.get("/api/dashboard/live")
+    assert res_live.status_code == 200
+    assert res_live.json["status"] == "streaming"
+    assert "posting_velocity_per_min" in res_live.json
+    assert isinstance(res_live.json["stream"], list)
+
     # Posts
     res_posts = client.get("/api/posts")
     assert res_posts.status_code == 200
     assert len(res_posts.json) > 0
+
+
+def test_authentication_flow(client):
+    # Test valid login with seeded analyst account
+    login_res = client.post("/api/auth/login", json={"username": "analyst", "password": "password123"})
+    assert login_res.status_code == 200
+    token = login_res.json["token"]
+    assert token is not None
+    assert login_res.json["user"]["username"] == "analyst"
+
+    # Test invalid login
+    invalid_res = client.post("/api/auth/login", json={"username": "analyst", "password": "wrongpassword"})
+    assert invalid_res.status_code == 401
+
+    # Test GET /api/auth/me with Bearer token
+    me_res = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me_res.status_code == 200
+    assert me_res.json["user"]["username"] == "analyst"
+
+    # Test user registration
+    reg_res = client.post("/api/auth/register", json={
+        "username": "new_analyst",
+        "email": "new@maandamanopulse.co.ke",
+        "password": "securepass123",
+        "role": "Civic Researcher"
+    })
+    assert reg_res.status_code == 201
+    assert reg_res.json["user"]["username"] == "new_analyst"
+
+    # Test Logout
+    logout_res = client.post("/api/auth/logout", headers={"Authorization": f"Bearer {token}"})
+    assert logout_res.status_code == 200
 
 
 def test_language_detection():
